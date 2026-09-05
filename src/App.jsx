@@ -18,7 +18,8 @@ const XABCDE_PRIMAIRE = [
     question: "Hémorragie externe ?",
     critique: "Identification saignement abondant = CRITIQUE",
     action: "Arrêt hémorragie, position d'attente adaptée",
-    signes: [],
+    tier: "critique",
+    signes: ["Saignement abondant, hémorragie active non maîtrisée"],
     icon: Droplets,
   },
   {
@@ -27,6 +28,7 @@ const XABCDE_PRIMAIRE = [
     question: "Voies aériennes libres ?",
     critique: "Obstruction totale persistante = CRITIQUE",
     action: "Désobstruction, LVA. Si obstruction partielle : ½ assis, O2 si nécessaire, maintien tête si nécessaire.",
+    tier: "critique",
     signes: [
       "Bruits anormaux",
       "Obstacle dans cavité buccale (langue, dents, corps étranger…)",
@@ -40,6 +42,7 @@ const XABCDE_PRIMAIRE = [
     question: "Respiration spontanée et efficace ?",
     critique: "Absence de ventilation efficace (< 1 mvt / 10s) = CRITIQUE",
     action: "RCP/DSA, ventilation BAVU (5 insufflations initiales si enfant ou noyade). Si signe(s) de détresse : O2, ½ assis.",
+    tier: "critique",
     signes: ["Bruit / toux", "Tirages", "Asymétrie", "Essoufflement", "Cyanose", "Sueurs"],
     icon: Activity,
   },
@@ -49,6 +52,7 @@ const XABCDE_PRIMAIRE = [
     question: "Efficacité de la circulation ?",
     critique: "Un ou plusieurs signes de détresse",
     action: "Allongé, O2 si nécessaire.",
+    tier: "detresse",
     signes: [
       "Pouls radial mal perçu / filant / irrégulier",
       "Aspect peau (pâleur, marbrures)",
@@ -63,6 +67,7 @@ const XABCDE_PRIMAIRE = [
     question: "État de conscience ?",
     critique: "Un ou plusieurs signes de détresse",
     action: "PLS si inconscient, O2 si nécessaire.",
+    tier: "detresse",
     signes: [
       "Conscience ou inconscience (EVDA)",
       "PC (perte de connaissance)",
@@ -79,6 +84,7 @@ const XABCDE_PRIMAIRE = [
     question: "Autres lésions vitales ?",
     critique: "Lésions associées",
     action: "Déshabillage sommaire si adapté. Si lésions vitales : position d'attente adaptée, O2 si nécessaire, couverture efficace.",
+    tier: "detresse",
     signes: ["Lésions associées (déshabillage sommaire et adapté)"],
     icon: ShieldAlert,
   },
@@ -153,19 +159,42 @@ const FICHE_AIDE_BILANS = {
 };
 
 const ARBRE_RACHIS_DECISION = [
-  { q: "Fiabilité des réponses de la victime ?", non: "Immobilisation (corps entier)", oui: "→ étape suivante" },
-  { q: "Présence de signes d'atteinte du rachis / de la moelle épinière ?", oui: "Immobilisation (corps entier)", non: "→ étape suivante" },
-  { q: "Traumatisme à haut risque d'atteinte du rachis ?", oui: "Immobilisation (corps entier)", non: "→ étape suivante" },
-  { q: "Âge > 65 ans ou antécédents à risque ?", oui: "Immobilisation (corps entier)", non: "Pas d'immobilisation du rachis" },
+  { q: "Fiabilité des réponses de la victime ?", non: "Immobilisation (corps entier)", oui: "→ étape suivante", immobilisationOn: "non" },
+  { q: "Présence de signes d'atteinte du rachis / de la moelle épinière ?", oui: "Immobilisation (corps entier)", non: "→ étape suivante", immobilisationOn: "oui" },
+  { q: "Traumatisme à haut risque d'atteinte du rachis ?", oui: "Immobilisation (corps entier)", non: "→ étape suivante", immobilisationOn: "oui" },
+  { q: "Âge > 65 ans ou antécédents à risque ?", oui: "Immobilisation (corps entier)", non: "Pas d'immobilisation du rachis", immobilisationOn: "oui" },
 ];
 
 const ARBRE_INTERVENTION_RACHIS = [
-  { q: "Recherche d'hémorragie (X) ?", oui: "Arrêt du saignement", non: "→ étape suivante" },
-  { q: "Recherche d'urgences vitales évidentes (ABCD) ?", oui: "Les traiter aussitôt leur découverte (détresses respiratoires, circulatoires, neurologiques)", non: "→ étape suivante" },
-  { q: "Bilan d'urgences moins évidentes (ABCD) → bilan complémentaire et traumatique → bilan de surveillance renouvelé toutes les 5 minutes maximum", info: true },
-  { q: "Transfert difficile ? (ex. ACT, victime debout, agitée, corpulente…)", oui: "Restriction des mouvements = pose de collier et maintien tête", non: "→ étape suivante" },
-  { q: "Relevage cuillère possible ?", oui: "Mise en place des blocs de tête et transfert dans le MID pour immobilisation", non: "→ étape suivante" },
-  { q: "Relevage en pont amélioré possible ?", oui: "Transfert dans le MID pour immobilisation avec mise en place des blocs de tête", non: "Poser un collier cervical, installer la victime sur un plan dur par roulement au sol avant de la transférer dans un moyen d'immobilisation" },
+  {
+    q: "Recherche d'hémorragie (X) ?",
+    oui: { terminal: true, text: "Arrêt du saignement", tone: "critical" },
+    non: { terminal: false },
+  },
+  {
+    q: "Recherche d'urgences vitales évidentes (ABCD) ?",
+    oui: { terminal: true, text: "Les traiter aussitôt leur découverte (détresses respiratoires, circulatoires, neurologiques)", tone: "critical" },
+    non: { terminal: false },
+  },
+  {
+    info: true,
+    text: "Bilan d'urgences moins évidentes (ABCD) → bilan complémentaire et traumatique → bilan de surveillance renouvelé toutes les 5 minutes maximum",
+  },
+  {
+    q: "Transfert difficile ? (ex. ACT, victime debout, agitée, corpulente…)",
+    oui: { terminal: true, text: "Restriction des mouvements = pose de collier et maintien tête", tone: "warning" },
+    non: { terminal: false },
+  },
+  {
+    q: "Relevage cuillère possible ?",
+    oui: { terminal: true, text: "Mise en place des blocs de tête et transfert dans le MID pour immobilisation", tone: "ok" },
+    non: { terminal: false },
+  },
+  {
+    q: "Relevage en pont amélioré possible ?",
+    oui: { terminal: true, text: "Transfert dans le MID pour immobilisation avec mise en place des blocs de tête", tone: "ok" },
+    non: { terminal: true, text: "Poser un collier cervical, installer la victime sur un plan dur par roulement au sol avant de la transférer dans un moyen d'immobilisation", tone: "ok" },
+  },
 ];
 
 const ARBRE_NOTE = "Maintien tête précoce sans retarder le bilan vital. NB : après immobilisation avec les blocs têtes dans le MID, veiller à desserrer le collier (voire le retirer s'il gêne). Pour un nouveau transfert, le remettre avant toute mobilisation n'assurant pas la rectitude de l'axe tête-cou-tronc.";
@@ -665,6 +694,7 @@ function CalcView() {
 
 function XabcdeWheel({ mode, setMode }) {
   const [active, setActive] = useState("X");
+  const [checks, setChecks] = useState({}); // { [letterKey]: { [signIndex]: boolean } }
   const data = mode === "primaire" ? XABCDE_PRIMAIRE : XABCDE_SECONDAIRE;
   const current = data.find((d) => d.key === active);
   const positions = {
@@ -675,6 +705,23 @@ function XabcdeWheel({ mode, setMode }) {
     D: "bottom-[18%] left-0",
     E: "top-[18%] left-0",
   };
+
+  const toggleSign = (letterKey, idx) => {
+    setChecks((prev) => {
+      const letterChecks = { ...(prev[letterKey] || {}) };
+      letterChecks[idx] = !letterChecks[idx];
+      return { ...prev, [letterKey]: letterChecks };
+    });
+  };
+
+  const isTouched = (letterKey) => checks[letterKey] !== undefined;
+  const anyChecked = (letterKey) => Object.values(checks[letterKey] || {}).some(Boolean);
+
+  const criticalLetters = ["X", "A", "B"];
+  const detresseLetters = ["C", "D", "E"];
+  const anyCriticalChecked = mode === "primaire" && criticalLetters.some((k) => anyChecked(k));
+  const anyDetresseChecked = mode === "primaire" && detresseLetters.some((k) => anyChecked(k));
+  const allTouched = mode === "primaire" && XABCDE_PRIMAIRE.every((d) => isTouched(d.key));
 
   return (
     <div className="space-y-4">
@@ -700,6 +747,8 @@ function XabcdeWheel({ mode, setMode }) {
         {data.map((d) => {
           const Icon = d.icon;
           const isActive = active === d.key;
+          const letterChecked = mode === "primaire" && anyChecked(d.key);
+          const letterTouched = mode === "primaire" && isTouched(d.key) && !letterChecked;
           return (
             <button
               key={d.key}
@@ -707,6 +756,10 @@ function XabcdeWheel({ mode, setMode }) {
               className={`absolute ${positions[d.key]} grid place-items-center w-16 h-16 rounded-2xl border-2 transition-all ${
                 isActive
                   ? "bg-orange-500 border-orange-500 text-white scale-110 shadow-lg z-10"
+                  : letterChecked
+                  ? "bg-red-50 dark:bg-red-950/40 border-red-400 text-red-600 dark:text-red-400"
+                  : letterTouched
+                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 text-emerald-600 dark:text-emerald-400"
                   : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300"
               }`}
             >
@@ -727,25 +780,47 @@ function XabcdeWheel({ mode, setMode }) {
           {mode === "primaire" ? (
             <>
               <p className="text-sm text-slate-700 dark:text-slate-300">{current.question}</p>
-              <div className="rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-3 py-2.5 flex gap-2">
-                <AlertTriangle size={16} className="shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
-                <span className="text-sm text-red-700 dark:text-red-300 font-medium">{current.critique}</span>
-              </div>
-              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300">
-                <span className="font-semibold">Conduite à tenir : </span>{current.action}
-              </div>
-              {current.signes.length > 0 && (
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5">Signes à rechercher</div>
-                  <ul className="space-y-1.5">
-                    {current.signes.map((s, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-slate-700 dark:text-slate-300">
-                        <span className="text-orange-500 mt-1">•</span><span>{s}</span>
-                      </li>
-                    ))}
-                  </ul>
+
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5">
+                  Cochez les signes retrouvés
                 </div>
-              )}
+                <div className="space-y-2">
+                  {current.signes.map((s, idx) => {
+                    const checked = !!(checks[current.key] || {})[idx];
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => toggleSign(current.key, idx)}
+                        className={`w-full flex items-center gap-3 rounded-xl border-2 px-3.5 py-3 text-left transition-colors ${
+                          checked
+                            ? "border-red-500 bg-red-50 dark:bg-red-950/40"
+                            : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50"
+                        }`}
+                      >
+                        <span
+                          className={`shrink-0 grid place-items-center w-6 h-6 rounded-md border-2 ${
+                            checked ? "bg-red-500 border-red-500 text-white" : "border-slate-300 dark:border-slate-600"
+                          }`}
+                        >
+                          {checked && <Check size={14} />}
+                        </span>
+                        <span className="text-sm text-slate-800 dark:text-slate-200">{s}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {anyChecked(current.key) ? (
+                <ResultBanner
+                  tone={current.tier === "critique" ? "critical" : "warning"}
+                  title={current.tier === "critique" ? "Critique" : "Signe de détresse"}
+                  subtitle={current.action}
+                />
+              ) : isTouched(current.key) ? (
+                <ResultBanner tone="ok" title="Normal" subtitle="Aucun signe retrouvé — passer à l'étape suivante." />
+              ) : null}
             </>
           ) : (
             <p className="text-sm text-slate-700 dark:text-slate-300">{current.detail}</p>
@@ -753,13 +828,38 @@ function XabcdeWheel({ mode, setMode }) {
         </SectionCard>
       )}
 
-      <div className="rounded-2xl border border-red-200 dark:border-red-900 bg-red-600 text-white px-4 py-3 flex items-center gap-3">
-        <Siren size={22} className="shrink-0" />
-        <div>
-          <div className="font-bold text-sm">CRITIQUE — 15</div>
-          <div className="text-xs opacity-90">Urgent, demander un renfort médicalisé</div>
-        </div>
-      </div>
+      {mode === "primaire" && (
+        anyCriticalChecked ? (
+          <div className="rounded-2xl border border-red-200 dark:border-red-900 bg-red-600 text-white px-4 py-3 flex items-center gap-3">
+            <Siren size={22} className="shrink-0" />
+            <div>
+              <div className="font-bold text-sm">CRITIQUE — 15</div>
+              <div className="text-xs opacity-90">Urgent, demander un renfort médicalisé</div>
+            </div>
+          </div>
+        ) : anyDetresseChecked ? (
+          <div className="rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-500 text-white px-4 py-3 flex items-center gap-3">
+            <AlertTriangle size={22} className="shrink-0" />
+            <div>
+              <div className="font-bold text-sm">Signe(s) de détresse identifié(s)</div>
+              <div className="text-xs opacity-90">Position d'attente adaptée, O2 si nécessaire</div>
+            </div>
+          </div>
+        ) : allTouched ? (
+          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-600 text-white px-4 py-3 flex items-center gap-3">
+            <Check size={22} className="shrink-0" />
+            <div>
+              <div className="font-bold text-sm">Aucune détresse identifiée</div>
+              <div className="text-xs opacity-90">Poursuivre vers le bilan secondaire</div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 px-4 py-3 flex items-center gap-3">
+            <Info size={20} className="shrink-0" />
+            <div className="text-xs">Cochez les signes présents sur chaque lettre pour obtenir le résultat global.</div>
+          </div>
+        )
+      )}
     </div>
   );
 }
@@ -804,6 +904,181 @@ function DecisionSteps({ steps }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+function RachisDecisionTool() {
+  const [step, setStep] = useState(0);
+  const [result, setResult] = useState(null); // null | "immobilisation" | "pas"
+  const [history, setHistory] = useState([]);
+
+  const current = ARBRE_RACHIS_DECISION[step];
+  const isLast = step === ARBRE_RACHIS_DECISION.length - 1;
+
+  const answer = (val) => {
+    setHistory((h) => [...h, { q: current.q, val, triggered: val === current.immobilisationOn }]);
+    if (val === current.immobilisationOn) {
+      setResult("immobilisation");
+    } else if (isLast) {
+      setResult("pas");
+    } else {
+      setStep((s) => s + 1);
+    }
+  };
+
+  const restart = () => {
+    setStep(0);
+    setResult(null);
+    setHistory([]);
+  };
+
+  return (
+    <div className="space-y-3">
+      {!result && (
+        <>
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Question {step + 1} / {ARBRE_RACHIS_DECISION.length}
+          </div>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            {current.q}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => answer("oui")}
+              className="rounded-xl border-2 border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 py-3 font-semibold text-sm text-red-700 dark:text-red-300 active:bg-red-100"
+            >
+              Oui
+            </button>
+            <button
+              onClick={() => answer("non")}
+              className="rounded-xl border-2 border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 py-3 font-semibold text-sm text-emerald-700 dark:text-emerald-300 active:bg-emerald-100"
+            >
+              Non
+            </button>
+          </div>
+        </>
+      )}
+
+      {result === "immobilisation" && (
+        <ResultBanner
+          tone="critical"
+          title="Immobilisation du rachis"
+          subtitle="Immobilisation corps entier requise (collier cervical + relevage adapté vers plan dur / MID)."
+        />
+      )}
+      {result === "pas" && (
+        <ResultBanner
+          tone="ok"
+          title="Pas d'immobilisation du rachis"
+          subtitle="Aucun critère d'immobilisation retrouvé sur les 4 questions."
+        />
+      )}
+
+      {history.length > 0 && (
+        <div className="space-y-1">
+          {history.map((h, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span className={`shrink-0 w-5 h-5 rounded-full grid place-items-center font-bold text-white ${h.triggered ? "bg-red-500" : "bg-emerald-500"}`}>
+                {h.val === "oui" ? "O" : "N"}
+              </span>
+              <span className="truncate">{h.q}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {result && (
+        <button
+          onClick={restart}
+          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
+        >
+          Recommencer
+        </button>
+      )}
+    </div>
+  );
+}
+
+function InterventionRachisTool() {
+  const [step, setStep] = useState(0);
+  const [result, setResult] = useState(null); // null | { text, tone }
+
+  const current = ARBRE_INTERVENTION_RACHIS[step];
+
+  const answer = (val) => {
+    const branch = current[val];
+    if (branch.terminal) {
+      setResult({ text: branch.text, tone: branch.tone });
+    } else {
+      setStep((s) => s + 1);
+    }
+  };
+
+  const acknowledgeInfo = () => setStep((s) => s + 1);
+
+  const restart = () => {
+    setStep(0);
+    setResult(null);
+  };
+
+  return (
+    <div className="space-y-3">
+      {!result && current && current.info && (
+        <>
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Étape {step + 1} / {ARBRE_INTERVENTION_RACHIS.length}
+          </div>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3.5 text-sm text-slate-700 dark:text-slate-300 flex gap-2">
+            <Info size={16} className="shrink-0 mt-0.5 text-orange-500" />
+            <span>{current.text}</span>
+          </div>
+          <button
+            onClick={acknowledgeInfo}
+            className="w-full rounded-xl bg-orange-500 text-white py-3 font-semibold text-sm"
+          >
+            Continuer
+          </button>
+        </>
+      )}
+
+      {!result && current && !current.info && (
+        <>
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Étape {step + 1} / {ARBRE_INTERVENTION_RACHIS.length}
+          </div>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
+            {current.q}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => answer("oui")}
+              className="rounded-xl border-2 border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 py-3 font-semibold text-sm text-red-700 dark:text-red-300 active:bg-red-100"
+            >
+              Oui
+            </button>
+            <button
+              onClick={() => answer("non")}
+              className="rounded-xl border-2 border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 py-3 font-semibold text-sm text-emerald-700 dark:text-emerald-300 active:bg-emerald-100"
+            >
+              Non
+            </button>
+          </div>
+        </>
+      )}
+
+      {result && (
+        <ResultBanner tone={result.tone} title="Conduite à tenir" subtitle={result.text} />
+      )}
+
+      {result && (
+        <button
+          onClick={restart}
+          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
+        >
+          Recommencer
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -894,17 +1169,17 @@ function ProtocolsView() {
         </div>
       </Accordion>
 
-      <Accordion id="arbres" title="Immobilisation du rachis" subtitle="Arbre de décision" icon={PersonStanding} tone="critical">
-        <DecisionSteps steps={ARBRE_RACHIS_DECISION} />
+      <Accordion id="arbres" title="Immobilisation du rachis" subtitle="Questionnaire pas à pas" icon={PersonStanding} tone="critical">
+        <RachisDecisionTool />
       </Accordion>
 
-      <Accordion title="Mécanismes accidentels à haut risque rachis" subtitle="Intervention pas à pas" icon={RadioTower} tone="critical">
+      <Accordion title="Mécanismes accidentels à haut risque rachis" subtitle="Questionnaire pas à pas" icon={RadioTower} tone="critical">
         <div className="space-y-3">
           <div className="flex gap-2 text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3">
             <Info size={16} className="shrink-0 mt-0.5 text-orange-500" />
             <span>{ARBRE_NOTE}</span>
           </div>
-          <DecisionSteps steps={ARBRE_INTERVENTION_RACHIS} />
+          <InterventionRachisTool />
         </div>
       </Accordion>
 
