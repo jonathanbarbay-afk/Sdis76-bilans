@@ -158,11 +158,89 @@ const FICHE_AIDE_BILANS = {
   final: ["Pratiquer les gestes de secours adaptés et vérifier leur efficacité", "Position d'attente adaptée", "Surveillance permanente"],
 };
 
-const ARBRE_RACHIS_DECISION = [
-  { q: "Fiabilité des réponses de la victime ?", non: "Immobilisation (corps entier)", oui: "→ étape suivante", immobilisationOn: "non" },
-  { q: "Présence de signes d'atteinte du rachis / de la moelle épinière ?", oui: "Immobilisation (corps entier)", non: "→ étape suivante", immobilisationOn: "oui" },
-  { q: "Traumatisme à haut risque d'atteinte du rachis ?", oui: "Immobilisation (corps entier)", non: "→ étape suivante", immobilisationOn: "oui" },
-  { q: "Âge > 65 ans ou antécédents à risque ?", oui: "Immobilisation (corps entier)", non: "Pas d'immobilisation du rachis", immobilisationOn: "oui" },
+const RACHIS_STEPS = [
+  {
+    q: "Fiabilité des réponses de la victime ?",
+    refLabel: "(A) Victime dont les réponses sont qualifiées de NON fiables",
+    groups: [
+      {
+        items: [
+          "Présence d'une détresse vitale",
+          "Altération du niveau de conscience",
+          "Non coopération, difficultés de communication",
+          "Influence de l'alcool ou d'autres drogues",
+          "Présence d'une atteinte traumatique sévère (douleur distrayante)",
+        ],
+      },
+    ],
+    onAny: { terminal: true, result: "immobilisation" },
+    onNone: { terminal: false },
+  },
+  {
+    q: "Présence de signes d'atteinte du rachis ou de la moelle épinière ?",
+    refLabel: "(B) Signes d'atteinte du rachis / (C) Signes d'atteinte de la moelle épinière",
+    groups: [
+      {
+        label: "(B) Signes d'atteinte du rachis",
+        items: [
+          "Douleur spontanée siégeant au niveau du rachis",
+          "Douleur du rachis à la mobilisation, à la marche",
+          "Raideur de la nuque empêchant de tourner la tête",
+          "Douleur à la palpation prudente du rachis",
+          "Déformation évidente du rachis",
+        ],
+      },
+      {
+        label: "(C) Signes d'atteinte de la moelle épinière",
+        items: [
+          "Perte ou diminution de la force musculaire ou de la motricité des mains ou des pieds",
+          "Perte ou diminution de la sensibilité des membres supérieurs (mains) ou inférieurs (pieds)",
+          "Engourdissement, sensations de décharges électriques au niveau des membres (paresthésie)",
+          "Perte des urines ou des matières fécales",
+          "Érection chez l'homme (victime inconsciente, victime trouvée déshabillée)",
+        ],
+      },
+    ],
+    onAny: { terminal: true, result: "immobilisation" },
+    onNone: { terminal: false },
+  },
+  {
+    q: "Traumatisme à haut risque d'atteinte du rachis ?",
+    refLabel: "(D) Traumatismes à haut risque du rachis",
+    groups: [
+      {
+        items: [
+          "Chute sur la tête d'une hauteur > 1 m (rachis cervical) ou chute sur les pieds/fesses d'une hauteur > 3 m (rachis dorso-lombo-sacré)",
+          "Passager d'un véhicule accidenté à grande vitesse (> 40 km/h, arrêt brutal, déformation de l'habitacle)",
+          "Absence de port de ceinture de sécurité (et déclenchement des airbags)",
+          "Retournement d'un véhicule",
+          "Victime éjectée d'un véhicule lors de la collision",
+          "Accident avec un véhicule à moteur de loisirs (jet-ski, quad, kart…)",
+          "Collision avec un 2 roues (conducteur ou passager)",
+          "Piéton renversé",
+          "Chute de cheval",
+        ],
+      },
+    ],
+    onAny: { terminal: false },
+    onNone: { terminal: true, result: "pas" },
+  },
+  {
+    q: "Âge > 65 ans ou antécédents à risque ?",
+    refLabel: "(E) Antécédents à risque",
+    groups: [
+      {
+        items: [
+          "Âge > 65 ans",
+          "Traumatisme vertébral ancien (fracture, luxation)",
+          "Chirurgie de la colonne vertébrale",
+          "Maladie de la colonne vertébrale ou des os fragilisant la colonne (ostéoporose)",
+        ],
+      },
+    ],
+    onAny: { terminal: true, result: "immobilisation" },
+    onNone: { terminal: true, result: "pas" },
+  },
 ];
 
 const ARBRE_INTERVENTION_RACHIS = [
@@ -908,69 +986,107 @@ function DecisionSteps({ steps }) {
 }
 
 function RachisDecisionTool() {
-  const [step, setStep] = useState(0);
-  const [result, setResult] = useState(null); // null | "immobilisation" | "pas"
+  const [stepIdx, setStepIdx] = useState(0);
+  const [checks, setChecks] = useState({}); // { [stepIdx]: { "groupIdx-itemIdx": bool } }
+  const [result, setResult] = useState(null); // null | { type: "immobilisation" | "pas" }
   const [history, setHistory] = useState([]);
 
-  const current = ARBRE_RACHIS_DECISION[step];
-  const isLast = step === ARBRE_RACHIS_DECISION.length - 1;
+  const step = RACHIS_STEPS[stepIdx];
 
-  const answer = (val) => {
-    setHistory((h) => [...h, { q: current.q, val, triggered: val === current.immobilisationOn }]);
-    if (val === current.immobilisationOn) {
-      setResult("immobilisation");
-    } else if (isLast) {
-      setResult("pas");
+  const toggle = (key) => {
+    setChecks((prev) => {
+      const stepChecks = { ...(prev[stepIdx] || {}) };
+      stepChecks[key] = !stepChecks[key];
+      return { ...prev, [stepIdx]: stepChecks };
+    });
+  };
+
+  const anyChecked = Object.values(checks[stepIdx] || {}).some(Boolean);
+
+  const validateStep = () => {
+    const outcome = anyChecked ? step.onAny : step.onNone;
+    setHistory((h) => [...h, { q: step.q, anyChecked }]);
+    if (outcome.terminal) {
+      setResult({ type: outcome.result });
     } else {
-      setStep((s) => s + 1);
+      setStepIdx((i) => i + 1);
     }
   };
 
   const restart = () => {
-    setStep(0);
+    setStepIdx(0);
+    setChecks({});
     setResult(null);
     setHistory([]);
   };
 
   return (
     <div className="space-y-3">
-      {!result && (
+      {!result && step && (
         <>
           <div className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Question {step + 1} / {ARBRE_RACHIS_DECISION.length}
+            Question {stepIdx + 1} / {RACHIS_STEPS.length}
           </div>
           <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
-            {current.q}
+            {step.q}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => answer("oui")}
-              className="rounded-xl border-2 border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 py-3 font-semibold text-sm text-red-700 dark:text-red-300 active:bg-red-100"
-            >
-              Oui
-            </button>
-            <button
-              onClick={() => answer("non")}
-              className="rounded-xl border-2 border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 py-3 font-semibold text-sm text-emerald-700 dark:text-emerald-300 active:bg-emerald-100"
-            >
-              Non
-            </button>
+          <div className="text-xs font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            Cochez les critères retrouvés
           </div>
+          <div className="space-y-3">
+            {step.groups.map((g, gIdx) => (
+              <div key={gIdx} className="space-y-2">
+                {g.label && (
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">{g.label}</div>
+                )}
+                {g.items.map((item, iIdx) => {
+                  const key = `${gIdx}-${iIdx}`;
+                  const checked = !!(checks[stepIdx] || {})[key];
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => toggle(key)}
+                      className={`w-full flex items-center gap-3 rounded-xl border-2 px-3.5 py-3 text-left transition-colors ${
+                        checked
+                          ? "border-red-500 bg-red-50 dark:bg-red-950/40"
+                          : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50"
+                      }`}
+                    >
+                      <span
+                        className={`shrink-0 grid place-items-center w-6 h-6 rounded-md border-2 ${
+                          checked ? "bg-red-500 border-red-500 text-white" : "border-slate-300 dark:border-slate-600"
+                        }`}
+                      >
+                        {checked && <Check size={14} />}
+                      </span>
+                      <span className="text-sm text-slate-800 dark:text-slate-200">{item}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={validateStep}
+            className="w-full rounded-xl bg-orange-500 text-white py-3 font-semibold text-sm"
+          >
+            Valider cette étape
+          </button>
         </>
       )}
 
-      {result === "immobilisation" && (
+      {result && result.type === "immobilisation" && (
         <ResultBanner
           tone="critical"
           title="Immobilisation du rachis"
           subtitle="Immobilisation corps entier requise (collier cervical + relevage adapté vers plan dur / MID)."
         />
       )}
-      {result === "pas" && (
+      {result && result.type === "pas" && (
         <ResultBanner
           tone="ok"
           title="Pas d'immobilisation du rachis"
-          subtitle="Aucun critère d'immobilisation retrouvé sur les 4 questions."
+          subtitle="Aucun critère d'immobilisation retrouvé."
         />
       )}
 
@@ -978,8 +1094,8 @@ function RachisDecisionTool() {
         <div className="space-y-1">
           {history.map((h, i) => (
             <div key={i} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <span className={`shrink-0 w-5 h-5 rounded-full grid place-items-center font-bold text-white ${h.triggered ? "bg-red-500" : "bg-emerald-500"}`}>
-                {h.val === "oui" ? "O" : "N"}
+              <span className={`shrink-0 w-5 h-5 rounded-full grid place-items-center font-bold text-white ${h.anyChecked ? "bg-red-500" : "bg-emerald-500"}`}>
+                {h.anyChecked ? "✓" : "–"}
               </span>
               <span className="truncate">{h.q}</span>
             </div>
