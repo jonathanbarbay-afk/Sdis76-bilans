@@ -4,7 +4,7 @@ import {
   Siren, Activity, Brain, Wind, Droplets, Thermometer, Gauge, Baby,
   Flame, Calculator, ListChecks, Clock, ShieldAlert, HeartPulse,
   Stethoscope, ArrowRight, Check, X, Info, LayoutList, RadioTower,
-  PersonStanding, ClipboardList
+  PersonStanding, ClipboardList, FileText, Copy, RotateCcw, ClipboardCheck
 } from "lucide-react";
 
 /* ============================================================
@@ -338,6 +338,155 @@ const WALLACE_ZONES = [
 
 /* ---------- Index de recherche ---------- */
 
+/* ---------- Fiche bilan — prise de notes terrain ---------- */
+
+/* ---------------------------------------------------------------
+   Sources des options à choix (RTN 2026 — Références Techniques
+   Nationales, arrêté du 07-07-2026 / JO du 11-07-2026, PSE1-PSE2) :
+   - Hémorragies externes .......... [05AC02-PR01 / 07-2026] p.116-117
+   - Obstruction voies aériennes ... [05AC04-PR03 / 07-2026] p.128-129
+   - Détresse respiratoire ......... [05AC07-PR08 / 07-2026] p.165-167
+   - Détresse circulatoire ......... [05AC08-PR09 / 07-2026] p.168-170
+     → TRC seuil : > 2 secondes (p.169)
+   - Détresse neurologique ......... [05AC09-PR10 / 12-2022] p.171-173
+   - Traumatisme dos et cou (rachis) [07AC08-PR08 / 07-2026] p.239-242
+     → critères (A)(B)(C)(D)(E) repris tels quels (cf. RACHIS_STEPS)
+   - Brûlures ....................... [07AC01-PR01 / 07-2026] p.201-203
+   - Hypothermie .................... [08AC06-PR07 / 06-2018] p.294-296
+     → 4 degrés : légère 35-32°C, modérée 32-28°C, sévère 28-24°C, grave <24°C
+   - Mesure de la douleur (EN) ...... [04FT16 / 12-2023] p.105-106
+     → seuil prise en charge : EN ≥ 4/10
+   - Perte de connaissance .......... [05AC06 / 12-2023] p.158
+   - Traumatisme du crâne (PCI) ..... [07AC09 / 06-2018] p.260
+   --------------------------------------------------------------- */
+
+const HYPOTHERMIE_OPTIONS = [
+  "Absente",
+  "Légère (35-32°C) — frissons",
+  "Modérée (32-28°C) — pas de frisson, troubles de la conscience",
+  "Sévère (28-24°C) — inconsciente, rigidité",
+  "Grave (< 24°C) — arrêt cardiaque apparent",
+];
+
+const FICHE_SECTIONS = [
+  {
+    key: "circonstanciel",
+    title: "Bilan circonstanciel",
+    icon: ClipboardList,
+    fields: [
+      { key: "age", label: "Âge de la victime", type: "text" },
+      { key: "situation", label: "Situation", type: "textarea" },
+      { key: "mission", label: "Mission", type: "textarea" },
+      { key: "execution", label: "Exécution", type: "textarea" },
+      { key: "securite", label: "Sécurité", type: "choice", options: ["Sécurisée", "Partiellement sécurisée", "Non sécurisée"] },
+      {
+        key: "avp_cinetique",
+        label: "AVP — critères de cinétique à haut risque (D)",
+        type: "multichoice",
+        options: [
+          "Chute sur la tête > 1 m ou sur pieds/fesses > 3 m",
+          "Véhicule à grande vitesse (> 40 km/h, arrêt brutal, déformation habitacle)",
+          "Absence de ceinture de sécurité (et airbags déclenchés)",
+          "Retournement d'un véhicule",
+          "Victime éjectée du véhicule",
+          "Véhicule de loisirs (jet-ski, quad, kart…)",
+          "Collision avec un 2 roues",
+          "Piéton renversé",
+          "Chute de cheval",
+        ],
+      },
+      { key: "avp_ceinture", label: "Ceinturé", type: "choice", options: ["Oui", "Non", "Éjecté"] },
+      { key: "avp_airbag", label: "Airbag", type: "choice", options: ["Déclenché", "Non déclenché"] },
+      { key: "avp_contact", label: "Contact véhicule", type: "choice", options: ["Coupé", "Non coupé"] },
+      { key: "avp_batterie", label: "Batterie", type: "choice", options: ["Débranchée", "Non débranchée"] },
+    ],
+  },
+  {
+    key: "primaire",
+    title: "Bilan primaire (XABCDE)",
+    icon: HeartPulse,
+    fields: [
+      { key: "x", label: "X — Hémorragie", type: "choice", options: ["Absente", "Contrôlée", "Non contrôlée"], criticalOn: "Non contrôlée" },
+      { key: "a", label: "A — Voies aériennes", type: "choice", options: ["Libre", "Obstruction partielle", "Obstruction totale"], criticalOn: "Obstruction totale" },
+      { key: "b", label: "B — Respiration (détresse si FR > 30/min ou SpO2 < 94 %, < 89 % si IRC)", type: "choice", options: ["Efficace", "Signe(s) de détresse", "Absence de ventilation"], criticalOn: "Absence de ventilation" },
+      { key: "c", label: "C — Circulation (détresse si FC > 120 ou < 40, PA systolique < 90 mmHg)", type: "choice", options: ["Efficace", "Signe(s) de détresse"], criticalOn: null },
+      { key: "d", label: "D — Neurologique", type: "choice", options: ["Conscient, normal", "Signe(s) de détresse (confusion, désorientation)", "Inconscient"], criticalOn: "Inconscient" },
+      { key: "e", label: "E — Autres lésions vitales", type: "textarea" },
+      { key: "couvrir", label: "Couvrir effectué", type: "toggle" },
+      { key: "fait_1min30", label: "Fait en 1'30", type: "toggle" },
+      { key: "critique", label: "CRITIQUE — renfort médicalisé demandé", type: "toggle", tone: "critical" },
+    ],
+  },
+  {
+    key: "secondaire",
+    title: "Bilan secondaire — paramètres & scores",
+    icon: Gauge,
+    fields: [
+      { key: "fc", label: "FC (fréquence cardiaque)", type: "text" },
+      { key: "fr", label: "FR (fréquence respiratoire)", type: "text" },
+      { key: "pa", label: "PA (pression artérielle)", type: "text" },
+      { key: "spo2", label: "SpO2 / IRC", type: "text" },
+      { key: "temp", label: "Température", type: "text" },
+      { key: "glycemie", label: "Glycémie", type: "text" },
+      { key: "trc", label: "TRC (détresse si > 2 secondes)", type: "choice", options: ["≤ 2 s (normal)", "> 2 s (allongé)"], criticalOn: null },
+      { key: "glasgow", label: "Score de Glasgow", type: "text" },
+      { key: "malinas", label: "Score de Malinas", type: "text" },
+      { key: "wallace", label: "Surface brûlée (règle de Wallace)", type: "text" },
+      { key: "collier", label: "Collier cervical posé", type: "toggle" },
+      { key: "tete_pieds", label: "Tête aux pieds — Écouter / Palper / Regarder", type: "textarea" },
+    ],
+  },
+  {
+    key: "fonctionnel",
+    title: "Bilan fonctionnel",
+    icon: Activity,
+    fields: [
+      { key: "pci", label: "Perte de connaissance", type: "choice", options: ["Non", "Transitoire (amnésie, décrite par témoins)", "Persistante"] },
+      { key: "hypothermie", label: "Hypothermie", type: "choice", options: HYPOTHERMIE_OPTIONS },
+    ],
+  },
+  {
+    key: "lesionnel",
+    title: "Bilan lésionnel",
+    icon: ShieldAlert,
+    fields: [
+      { key: "lesionnel", label: "Hémorragie, fracture, brûlure, plaie", type: "textarea" },
+      { key: "douleur", label: "Douleur — échelle numérique (prise en charge si ≥ 4/10)", type: "scale10" },
+      { key: "pqrst_p", label: "P — Provoqué par", type: "text" },
+      { key: "pqrst_q", label: "Q — Qualité", type: "text" },
+      { key: "pqrst_r", label: "R — Région", type: "text" },
+      { key: "pqrst_s", label: "S — Sévérité", type: "text" },
+      { key: "pqrst_t", label: "T — Temps", type: "text" },
+      { key: "lesionnel_autre", label: "Autre", type: "textarea" },
+    ],
+  },
+  {
+    key: "antecedent",
+
+    title: "Antécédents (interrogatoire victime/témoins)",
+    icon: ClipboardCheck,
+    fields: [
+      { key: "mhtaf_m", label: "M — Maladies", type: "text" },
+      { key: "mhtaf_h", label: "H — Hospitalisations", type: "text" },
+      { key: "mhtaf_t", label: "T — Traitements", type: "text" },
+      { key: "mhtaf_a", label: "A — Allergies", type: "text" },
+      { key: "mhtaf_f", label: "F — Facteurs de risque", type: "text" },
+      { key: "atcd_autre", label: "Autre", type: "textarea" },
+    ],
+  },
+  {
+    key: "final",
+    title: "Précisions & gestes effectués",
+    icon: FileText,
+    fields: [
+      { key: "precisions", label: "Précisions bilan", type: "textarea", big: true },
+      { key: "gestes", label: "Gestes effectués", type: "textarea", big: true },
+    ],
+  },
+];
+
+const FICHE_STORAGE_KEY = "sdis76-fiche-bilan";
+
 const SEARCH_INDEX = [
   { id: "xabcde-primaire", cat: "Protocole", title: "Bilan XABCDE — primaire", tags: "xabcde primaire hémorragie voies aériennes respiration circulation conscience exposition urgence critique", tab: "protocols", anchor: "xabcde" },
   { id: "xabcde-secondaire", cat: "Protocole", title: "Bilan XABCDE — secondaire", tags: "xabcde secondaire réévaluation fréquence tension glycémie pupilles fast", tab: "protocols", anchor: "xabcde" },
@@ -349,6 +498,7 @@ const SEARCH_INDEX = [
   { id: "score-malinas", cat: "Calculateur", title: "Score de Malinas", tags: "malinas accouchement imminent parité travail contractions parturiente", tab: "calc", anchor: "malinas" },
   { id: "score-evendol", cat: "Calculateur", title: "Échelle EVENDOL", tags: "evendol douleur pédiatrique enfant hétéroévaluation", tab: "calc", anchor: "evendol" },
   { id: "regle-wallace", cat: "Calculateur", title: "Règle des 9 de Wallace", tags: "wallace brûlure surface corporelle pourcentage", tab: "calc", anchor: "wallace" },
+  { id: "fiche-bilan", cat: "Fiche bilan", title: "Fiche bilan — prise de notes terrain", tags: "fiche bilan notes transmission médecin circonstanciel primaire secondaire lésionnel antécédent gestes", tab: "fiche", anchor: "fiche-bilan" },
 ];
 
 /* ============================================================
@@ -1358,6 +1508,278 @@ function ProtocolsView() {
    APP — SHELL & NAVIGATION
    ============================================================ */
 
+/* ============================================================
+   MODULE : FICHE BILAN — PRISE DE NOTES TERRAIN
+   ============================================================ */
+
+function useFicheBilan() {
+  const [notes, setNotes] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(FICHE_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const update = useCallback((key, value) => {
+    setNotes((prev) => {
+      const next = { ...prev, [key]: value };
+      try {
+        window.localStorage.setItem(FICHE_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {
+        /* stockage indisponible */
+      }
+      return next;
+    });
+  }, []);
+
+  const reset = useCallback(() => {
+    setNotes({});
+    try {
+      window.localStorage.removeItem(FICHE_STORAGE_KEY);
+    } catch (e) {
+      /* stockage indisponible */
+    }
+  }, []);
+
+  return { notes, update, reset };
+}
+
+function FicheField({ field, value, onChange }) {
+  if (field.type === "toggle") {
+    const active = !!value;
+    const toneClasses = field.tone === "critical"
+      ? active
+        ? "border-red-500 bg-red-600 text-white"
+        : "border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300"
+      : active
+        ? "border-orange-500 bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300"
+        : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300";
+    return (
+      <button
+        onClick={() => onChange(!active)}
+        className={`w-full flex items-center gap-3 rounded-xl border-2 px-3.5 py-3 text-left transition-colors ${toneClasses}`}
+      >
+        <span className={`shrink-0 grid place-items-center w-6 h-6 rounded-md border-2 ${active ? "bg-white/20 border-white" : "border-slate-300 dark:border-slate-600"}`}>
+          {active && <Check size={14} />}
+        </span>
+        <span className="text-sm font-medium">{field.label}</span>
+      </button>
+    );
+  }
+
+  if (field.type === "choice") {
+    return (
+      <div className="space-y-1.5">
+        <label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{field.label}</label>
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
+          {field.options.map((opt) => {
+            const active = value === opt;
+            const isCritical = field.criticalOn && opt === field.criticalOn;
+            return (
+              <button
+                key={opt}
+                onClick={() => onChange(active ? undefined : opt)}
+                className={`shrink-0 px-3.5 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap border-2 transition-colors ${
+                  active
+                    ? isCritical
+                      ? "bg-red-600 border-red-600 text-white"
+                      : "bg-orange-500 border-orange-500 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-300"
+                }`}
+              >
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (field.type === "multichoice") {
+    const selected = Array.isArray(value) ? value : [];
+    const toggleItem = (opt) => {
+      onChange(selected.includes(opt) ? selected.filter((o) => o !== opt) : [...selected, opt]);
+    };
+    return (
+      <div className="space-y-1.5">
+        <label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{field.label}</label>
+        <div className="flex flex-wrap gap-2">
+          {field.options.map((opt) => {
+            const active = selected.includes(opt);
+            return (
+              <button
+                key={opt}
+                onClick={() => toggleItem(opt)}
+                className={`px-3 py-2 rounded-full text-xs font-semibold border-2 transition-colors ${
+                  active
+                    ? "bg-red-600 border-red-600 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-300"
+                }`}
+              >
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (field.type === "scale10") {
+    return (
+      <div className="space-y-1.5">
+        <label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{field.label}</label>
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
+          {Array.from({ length: 11 }, (_, n) => n).map((n) => {
+            const active = value === n;
+            const isCritical = n >= 4;
+            return (
+              <button
+                key={n}
+                onClick={() => onChange(active ? undefined : n)}
+                className={`shrink-0 w-10 h-10 rounded-full text-sm font-bold border-2 transition-colors ${
+                  active
+                    ? isCritical
+                      ? "bg-red-600 border-red-600 text-white"
+                      : "bg-emerald-500 border-emerald-500 text-white"
+                    : "bg-slate-100 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-300"
+                }`}
+              >
+                {n}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (field.type === "textarea") {
+    return (
+      <div className="space-y-1.5">
+        <label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{field.label}</label>
+        <textarea
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+          rows={field.big ? 5 : 2}
+          className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 px-3.5 py-2.5 text-sm outline-none ring-2 ring-transparent focus:ring-orange-500 resize-none"
+          placeholder="Noter ici…"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{field.label}</label>
+      <input
+        type="text"
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 px-3.5 py-2.5 text-sm outline-none ring-2 ring-transparent focus:ring-orange-500"
+        placeholder="Noter ici…"
+      />
+    </div>
+  );
+}
+
+function buildFicheSummary(notes) {
+  const blocks = [];
+  for (const section of FICHE_SECTIONS) {
+    const lines = [];
+    for (const field of section.fields) {
+      const val = notes[field.key];
+      if (field.type === "toggle") {
+        if (val) lines.push(`${field.label} : OUI`);
+      } else if (field.type === "multichoice") {
+        if (Array.isArray(val) && val.length > 0) lines.push(`${field.label} : ${val.join("; ")}`);
+      } else if (field.type === "scale10") {
+        if (val !== undefined && val !== null) lines.push(`${field.label} : ${val}/10`);
+      } else if (val !== undefined && val !== null && String(val).trim()) {
+        lines.push(`${field.label} : ${val}`);
+      }
+    }
+    if (lines.length > 0) {
+      blocks.push(`${section.title.toUpperCase()}\n${lines.join("\n")}`);
+    }
+  }
+  return blocks.join("\n\n");
+}
+
+function FicheBilanView() {
+  const { notes, update, reset } = useFicheBilan();
+  const [copied, setCopied] = useState(false);
+  const summary = useMemo(() => buildFicheSummary(notes), [notes]);
+  const hasContent = summary.trim().length > 0;
+
+  const handleReset = () => {
+    if (window.confirm("Effacer toutes les notes de cette fiche pour en commencer une nouvelle ?")) {
+      reset();
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(summary);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      /* copie indisponible, l'utilisateur peut sélectionner le texte manuellement */
+    }
+  };
+
+  return (
+    <div id="fiche-bilan" className="px-4 pt-3 pb-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <Eyebrow icon={FileText}>Fiche bilan — prise de notes</Eyebrow>
+        <button
+          onClick={handleReset}
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800"
+        >
+          <RotateCcw size={13} /> Nouvelle fiche
+        </button>
+      </div>
+
+      {FICHE_SECTIONS.map((section) => (
+        <Accordion key={section.key} title={section.title} icon={section.icon} defaultOpen={section.key === "circonstanciel"}>
+          <div className="space-y-3">
+            {section.fields.map((field) => (
+              <FicheField
+                key={field.key}
+                field={field}
+                value={notes[field.key]}
+                onChange={(v) => update(field.key, v)}
+              />
+            ))}
+          </div>
+        </Accordion>
+      ))}
+
+      <SectionCard className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <Eyebrow icon={ClipboardCheck} tone="ok">Résumé pour transmission</Eyebrow>
+          {hasContent && (
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 px-2.5 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-950/40"
+            >
+              <Copy size={13} /> {copied ? "Copié !" : "Copier"}
+            </button>
+          )}
+        </div>
+        {hasContent ? (
+          <pre className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300 font-sans leading-relaxed">{summary}</pre>
+        ) : (
+          <p className="text-sm text-slate-400 dark:text-slate-500">Remplis les champs ci-dessus — le résumé à lire au médecin apparaîtra ici, dans l'ordre du bilan.</p>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
 export default function App() {
   const [dark, setDark] = useState(true);
   const [tab, setTab] = useState("search");
@@ -1377,6 +1799,7 @@ export default function App() {
     { key: "search", label: "Recherche", icon: Search },
     { key: "calc", label: "Calculateurs", icon: Calculator },
     { key: "protocols", label: "Protocoles", icon: ListChecks },
+    { key: "fiche", label: "Fiche", icon: FileText },
   ];
 
   return (
@@ -1407,10 +1830,11 @@ export default function App() {
           {tab === "search" && <SearchView query={query} setQuery={setQuery} favorites={favorites} toggleFavorite={toggle} onNavigate={handleNavigate} />}
           {tab === "calc" && <CalcView />}
           {tab === "protocols" && <ProtocolsView />}
+          {tab === "fiche" && <FicheBilanView />}
         </main>
 
         <nav className="fixed bottom-0 inset-x-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-800">
-          <div className="max-w-lg mx-auto grid grid-cols-3">
+          <div className="max-w-lg mx-auto grid grid-cols-4">
             {NAV.map((n) => {
               const active = tab === n.key;
               const Icon = n.icon;
